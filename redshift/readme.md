@@ -22,3 +22,7 @@ vim ~/.config/redshift/redshift.conf
 
 [redshift]
 location-provider=geoclue2
+
+# Execute Redshift at i3's startup
+
+exec --no-startup-id redshift-gtk
