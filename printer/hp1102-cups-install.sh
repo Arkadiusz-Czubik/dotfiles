@@ -7,6 +7,8 @@
 
 # Created based on an article:
 # https://gist.github.com/edoz90/660a2a67b9bc8a815ba537530137636a
+# First one needs to install foo2zjs from here
+# http://foo2zjs.rkkda.com/
 
 # Set printer name
 PRINTER_NAME=HP_P1102w
