@@ -1,74 +1,109 @@
 @startuml
 
-@startuml
+autonumber "[0]"
 
-title "Push Notification Enrollment"
+legend top
+|=Color |= Type |
+|<back:#f5f7cd>___________________</back>| Main system APIs |
+|<back:#d4e0ca>___________________</back>| Transfer Flow components|
+|<back:#d5e3d8>___________________</back>| Notifications|
+|<back:#d1dee0>___________________</back>| Bridge|
+|<back:#d6ccdb>___________________</back>| Fallback |
+endlegend
 
-hide footbox
-autonumber "[0] "
-
-box UserModel
-participant "Client App" as Client << (U, #ccebc5) user >>
-participant Dupa
+actor UI
+box Team C \n (Front)
+    participant SFF as SFF
+    participant TEP
+    participant Microform    
 end box
 
-participant "Orchestration Layer" as Orch << (C, #b3cde3) capital one >>
-participant "Messaging Server" as MS << (C, #b3cde3) capital one >>
-note over MS
-This is where you can put useful information like links to documentation or support processes.
-end note
+box Team A \n (Product Transfer)
+    participant LTO as LTO
+end box
 
-participant "Notification Subscription Server" as NSS << (C, #b3cde3) capital one >>
+box Transfer API #f5f7cd
+    participant "transfer.\nstatus.\nevents" as transfer_status 
+    participant "trasnfer.\ncreate.\nevents" as transfer_create
+end box
 
-participant "APNS" as APNS << (E, #fbb4ae) external >>
-participant "GCM" as GCM << (E, #fbb4ae) external >>
+box Team A \n (Generic Transfer Flow) #d4e0ca
+    participant TransferFlow
+    participant "Authorization\nStrategy\nManager" as AuthorizationStrategyManager
+end box
 
-==Customer Action==
+box Team A \n (Ledger) #d4e0ca
+    participant Ledger_L2
+    participant Ledger_L3
+end box
 
-Client -> Client: First time login, or app upgrade, or user toggles notifications on/off in the app.
+box Team A \n (Authorization API) #f5f7cd
+    participant "authorization.\nevents" as authorization_events
+end box
 
-==Device Registration==
+box Team A \n (Internal)
+    participant Authorization
+    participant "Dummy\nAuth" as DummyAuth
+end box
 
-Client -> APNS: If iOS, register device token in APNS
-Client -> GCM: If Android, register device token in GCM
+box Team C \n (Ledger) #d4e0ca
+    participant "Payment\nLedger_L1" as PaymentLedger_L1
+end box
 
-Client --> Dupa: Command
-Client <-- Dupa: Event
+box Team C \n(Payment API) #f5f7cd
+    participant "payment.\nevents" as payment_events
+end box
 
-==Update Messaging Server==
+box Team C \n (Internal) 
+    participant PaymentService
+    participant "Cybersource\nIntegration" as CybersourceIntegration
+    participant Cybersource
+    participant "Cardinal\nCommerce" as CardinalCommerce
+end box
 
-Client -> Orch: Update device token
+box Tam B (User Model API) #f5f7cd
+    participant "users.\ndata-\ninlined-\ncommon.\nevents" as  user_common
+    participant "users.\ndata-\ninlined-\nnotifications.\nevents" as user_notifications
+    participant "users.\nlatest\nsnapshot.\nevents" as user_snapshots
+end box
 
-Orch -> MS: Get existing subscriptions
-MS -> Orch: If success, return all
-Orch -> Orch: Check if device token is present
+box Team D \n (Ledger) #d4e0ca
+    participant "Delivery\nLedger_L4" as DeliveryLedger_L4
+end box
 
-Orch -> MS: If device token is present, stop (skip to next group)
+box Team D \n (Delivery API) #f5f7cd
+    participant "payout.\nevents" as payout_events
+end box
 
-Orch -> MS: If device token not present, add subscription
-note left
-{ "device_token" : "APA91bE_YiasYasbda..." }
-end note
-MS -> Orch: Return success/failure
+box Team D \n (Delivery) #e6d8d8
+    participant Delivery
+    participant COPLA
+end box
 
-==Update Master Subscription==
+box Team D #bad0d1
+    participant Notifications
+end box
 
-Orch -> NSS: Register device token
-NSS -> Orch: Return success/failure
+box Team E #d1dee0
+    participant Bridge
+end box 
 
-Orch -> Orch: Swallow failure 
-Orch -> Client: Return success/failure
+box Team E (Bridge API) #f5f7cd
+    participant "bridge.\ntransaction-shadowed.\nevents" as bridge_events
+end box
 
-==Replicate Subscriptions==
+box Team F \n (Fallback API) #f5f7cd
+    participant "fallback.\nevents" as fallback_events
+end box
 
-Client -> Orch: Update subscriptions 
-Orch -> MS: Update subscriptions
+box Team F #d6ccdb
+    participant Fallback
+end box
 
-MS -> MS: Update subscription in Messaging Server
+box Legacy #cccfdb
+    participant LegacyDb
+end box
 
-MS -> Orch: Return success/failure
-Orch -> Orch: Swallow failure
-Orch -> Client: Return success/failure
 
 @enduml
 
