@@ -1,0 +1,10 @@
+@startuml
+
+participant Arek
+participant Olek
+
+Alek --> Olek: TransactionStarted
+
+
+@enduml
+
