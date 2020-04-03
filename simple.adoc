@@ -12,25 +12,14 @@ legend top
 endlegend
 
 actor UI
-box Team C \n (Front)
-    participant SFF as SFF
-    participant TEP
-    participant Microform    
-end box
-
-box Team A \n (Product Transfer)
-    participant LTO as LTO
-end box
-
-box Transfer API #f5f7cd
+participant SFF as SFF
+participant TEP
+participant Microform    
+participant LTO as LTO
     participant "transfer.\nstatus.\nevents" as transfer_status 
     participant "trasnfer.\ncreate.\nevents" as transfer_create
-end box
-
-box Team A \n (Generic Transfer Flow) #d4e0ca
     participant TransferFlow
     participant "Authorization\nStrategy\nManager" as AuthorizationStrategyManager
-end box
 
 box Team A \n (Ledger) #d4e0ca
     participant Ledger_L2
