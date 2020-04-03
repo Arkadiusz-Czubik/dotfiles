@@ -7,8 +7,10 @@ title "Push Notification Enrollment"
 hide footbox
 autonumber "[0] "
 
+box UserModel
 participant "Client App" as Client << (U, #ccebc5) user >>
 participant Dupa
+end box
 
 participant "Orchestration Layer" as Orch << (C, #b3cde3) capital one >>
 participant "Messaging Server" as MS << (C, #b3cde3) capital one >>
