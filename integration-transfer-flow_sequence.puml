@@ -1,0 +1,474 @@
+@startuml
+
+autonumber "[0]"
+
+legend top
+|=Color |= Type |
+|<back:#f5f7cd>___________________</back>| Main system APIs |
+|<back:#d4e0ca>___________________</back>| Transfer Flow components|
+|<back:#d5e3d8>___________________</back>| Notifications|
+|<back:#d1dee0>___________________</back>| Bridge|
+|<back:#d6ccdb>___________________</back>| Fallback |
+endlegend
+
+actor UI
+box Team C \n (Front)
+    participant SFF as SFF
+    participant TEP
+    participant Microform    
+end box
+
+box Team A \n (Product Transfer)
+    participant LTO as LTO
+end box
+
+box Transfer API #f5f7cd
+    participant "transfer.\nstatus.\nevents" as transfer_status 
+    participant "trasnfer.\ncreate.\nevents" as transfer_create
+end box
+
+box Team A \n (Generic Transfer Flow) #d4e0ca
+    participant TransferFlow
+    participant "Authorization\nStrategy\nManager" as AuthorizationStrategyManager
+end box
+
+box Team A \n (Ledger) #d4e0ca
+    participant Ledger_L2
+    participant Ledger_L3
+end box
+
+box Team A \n (Authorization API) #f5f7cd
+    participant "authorization.\nevents" as authorization_events
+end box
+
+box Team A \n (Internal)
+    participant Authorization
+    participant "Dummy\nAuth" as DummyAuth
+end box
+
+box Team C \n (Ledger) #d4e0ca
+    participant "Payment\nLedger_L1" as PaymentLedger_L1
+end box
+
+box Team C \n(Payment API) #f5f7cd
+    participant "payment.\nevents" as payment_events
+end box
+
+box Team C \n (Internal) 
+    participant PaymentService
+    participant "Cybersource\nIntegration" as CybersourceIntegration
+    participant Cybersource
+    participant "Cardinal\nCommerce" as CardinalCommerce
+end box
+
+box Tam B (User Model API) #f5f7cd
+    participant "users.\ndata-\ninlined-\ncommon.\nevents" as  user_common
+    participant "users.\ndata-\ninlined-\nnotifications.\nevents" as user_notifications
+    participant "users.\nlatest\nsnapshot.\nevents" as user_snapshots
+end box
+
+box Team D \n (Ledger) #d4e0ca
+    participant "Delivery\nLedger_L4" as DeliveryLedger_L4
+end box
+
+box Team D \n (Delivery API) #f5f7cd
+    participant "payout.\nevents" as payout_events
+end box
+
+box Team D \n (Delivery) #e6d8d8
+    participant Delivery
+    participant COPLA
+end box
+
+box Team D #bad0d1
+    participant Notifications
+end box
+
+box Team E #d1dee0
+    participant Bridge
+end box 
+
+box Team E (Bridge API) #f5f7cd
+    participant "bridge.\ntransaction-shadowed.\nevents" as bridge_events
+end box
+
+box Team F \n (Fallback API) #f5f7cd
+    participant "fallback.\nevents" as fallback_events
+end box
+
+box Team F #d6ccdb
+    participant Fallback
+end box
+
+box Legacy #cccfdb
+    participant LegacyDb
+end box
+
+== Submit Transfer ==
+UI -> SFF: CreateTransfer
+activate SFF
+    SFF -> TEP++
+    TEP --> LTO: CreateTransfer
+    note right #e6fff3
+        Here LTO configures generic Transfer Flow with all components
+        required to perform Money Transfers
+        Ledgers:
+        - PaymentLedger with PaymentAuthorizationStrategy
+        - UserLedger for sender
+        - UserLedget for recipient
+        - DeliveryLedger
+        Transfers flows:
+        - TransferFlow 1 : Payment->Sender
+        - TransferFlow 2 : Sender->Recipient
+        - TransferFlow 3 : Recipient->Delivery
+    end note
+    activate LTO
+        LTO <-[#008a37]- user_snapshots: LatestUserSnapshot
+        LTO --> PaymentLedger_L1++: CreateLedger 
+        note right
+            integration point 1
+        end note
+        PaymentLedger_L1 --> PaymentService++: CreateAmountDue
+        PaymentLedger_L1 <-- PaymentService--: AmountDueCreated
+        LTO <-- PaymentLedger_L1--: LedgerCreated
+        note right
+            integration point 1: response
+        end note
+        LTO --> Ledger_L2++: CreateLedger
+        LTO <-- Ledger_L2--: LedgerCreated
+        LTO --> Ledger_L3++: CreateLedger
+        LTO <-- Ledger_L3--: LedgerCreated
+        LTO --> DeliveryLedger_L4++: CreateLedger
+        note right
+            integration point 2
+        end note
+        DeliveryLedger_L4 --> Delivery++: CreateDelivery
+        DeliveryLedger_L4 <-- Delivery--: DeliveryCreated
+        LTO <-- DeliveryLedger_L4--: LedgerCreated
+        note right 
+            integration point 2 : response
+        end note
+        LTO --> AuthorizationStrategyManager++: CreateAuthorizationStrategy(flow 1) [for payment ledger]
+        AuthorizationStrategyManager --> Authorization++: Create
+        AuthorizationStrategyManager <-- Authorization--: Created
+        note right #e6fff3
+            Create authorization strategy for TransferFlow1
+        end note
+        LTO <-- AuthorizationStrategyManager: AuthorizationStrategyCreated
+        deactivate AuthorizationStrategyManager
+        LTO --> AuthorizationStrategyManager++: CreateAuthorizationStrategy(flow 2)
+        LTO <-- AuthorizationStrategyManager--: AuthorizationStrategyCreated
+        note right #e6fff3
+            Create dummy authorization strategy for TransferFlow2
+        end note
+        LTO --> AuthorizationStrategyManager++: CreateAuthorizationStrategy(flow 3) 
+        LTO <-- AuthorizationStrategyManager--: AuthorizationStrategyCreated
+        note right #e6fff3
+            Create dummy authorization strategy for TransferFlow3
+        end note
+        LTO --> TransferFlow++ : StartTransferFlow1 (Payment->Sender)
+        LTO --> TransferFlow : StartTransferFlow (Sender->Recipient)
+        LTO --> TransferFlow : StartTransferFlow (Recipient->Delivery)
+        LTO -[#008a37]-> transfer_create: **TransferCreated** 
+    deactivate LTO
+
+        transfer_create -[#008a37]-> TEP: **TransferCreated**
+        SFF <- TEP--: TransferCreated
+        
+
+        transfer_create -[#008a37]-> LTO++: **TransferCreated**
+        LTO -[#008a37]-> transfer_status: **Created** 
+        deactivate LTO
+        
+        transfer_status -[#008a37]-> Fallback : **TransferCreated**
+
+== Transfer Flow 1 (Payment -> Sender) ==
+        TransferFlow --> PaymentLedger_L1++: LedgerLock(ledgerId)
+        note right
+            #integration point 3
+        end note
+    SFF -> PaymentService++: CreatePaymentSession
+    ' payment service uderza do CybersourceIntegration
+    ' tworzy payment session z Id które jest potem wysyłane do Cybersource jako correlationId
+    ' CybersourceIntegration zwraca redirect_link_1 ten na który wchodzi użytkownik żeby się zautoryzować (ten który wyświetla formatkę z danymi karty)
+    SFF <-- PaymentService--: <payment_url>
+    UI <- SFF: payment_url,\nstartedTransactionId,\nTransferId
+deactivate SFF
+activate UI
+
+== Transfer Flow 1 [Lock Money] ==
+UI -> Microform: Display Microform at payment_url \n /api/payment-providers/cb/sessions/{payment-session-id}
+note right
+    integration point 9: request
+end note
+deactivate UI
+activate Microform
+    Microform -> CybersourceIntegration++: /api/payment-providers/cb/sessions/{payment-session-id}/init
+        CybersourceIntegration -> Cybersource++: Register Session
+        note right
+            integration point 3: request
+        end note
+        CybersourceIntegration <- Cybersource--: <capture_context>
+        note right
+            integration point 3: response
+        end note
+    Microform <- CybersourceIntegration--: <context_token>,<cardinal_commerce_token>(do 3dsa),<cancel_url>
+    Microform -> CardinalCommerce: Init(<cardinal_commerce_token>)
+    CardinalCommerce -> Microform: <cardinalSessionId>
+    Microform -> Microform: Fill card details
+    Microform -> Microform: click_pay
+    activate Microform
+        Microform -> Cybersource++: GetTransientToken
+        note right
+            integration point 6: request
+        end note
+        Microform <- Cybersource--: <JWT transient_token>
+        note right
+            integration point 6: response
+        end note
+        Microform -> CybersourceIntegration++: /api/payment-providers/cb/sessions/{payment-session-id}/enroll \n (<cardinalSessionId>,<JWT transient_token>)
+            CybersourceIntegration -> Cybersource++: CardAuthorization \n <cardinalSessionId>, \n <JWT transient_token>, \n <payment-session-id>
+            note right
+                integration point 7: request
+            end note
+            CybersourceIntegration <- Cybersource--: <accept/reject/review>, \n <reason_code>
+            note right
+                integration point 7: response
+            end note
+            note left #e6fff3
+            - **ACCEPT**: redirect to success url
+            - **REVIEW**: redirect to success url
+            - **DECLINE with code 475**: 3ds challenge required
+            - **REVIEW with code 201**: redirect to failure url
+            - **DECLINE**: redirect to failure url
+            end note
+        Microform <- CybersourceIntegration--: return with redirectUrl,redirect (true/false),3dsContinue(true/false),3dsRedirectURL(optional)
+        PaymentService <- CybersourceIntegration--: Payment\nSession\nAuthorized
+        alt if 3DS required
+            Microform -> Microform: IFRAME(<3dsRedirectURL>)
+            activate Microform
+              Microform -> Microform: Fill 3DS data
+              Microform -> Microform: click_ok
+              Microform -> Microform: <JWT token cardinal>, \n <processorTransactionId>
+            deactivate Microform
+            Microform -> CybersourceIntegration++: if 3DS succesfull /api/payment-providers/cb/sessions/{payment-session-id}/valid-auth (<JWT token>,<JWT token cardinal>,<processorTransactionId>)
+                CybersourceIntegration -> Cybersource++: CardAuthorization \n <processorTransactionId>, \n <JWT transient_token>, \n <payment-session-id>
+                note right
+                    integration point 8: request
+                end note
+                CybersourceIntegration <- Cybersource--: <accept/reject/review>
+                note right
+                    integration point 8: reponse
+                end note
+                note left #e6fff3
+                - **ACCEPT**: redirect to success url
+                - **REVIEW**: redirect to success url
+                - **REVIEW with code 481**: redirect to failure url
+                - **DECLINE**: redirect to failure url
+                end note
+            Microform <- CybersourceIntegration--: return with redirectUrl,redirect (true/false)
+        end
+        deactivate Microform
+UI <- Microform-- :going to redirectUrl (it is one of: successUrl/failureUrl)
+note right
+    integration point 9: response
+end note
+
+
+CybersourceIntegration --> PaymentService++: Payment\nSession\nAuthorized
+payment_events <-[#008a37]- PaymentService-- : Payment\nAuthorized
+
+PaymentLedger_L1 <-[#008a37]- payment_events: Payment\nAuthorized
+TransferFlow <-- PaymentLedger_L1--: LedgerLocked 
+note right
+    integration point 3 : return
+end note
+
+
+== Transfer Flow 1 [Money Locked] ==
+PaymentLedger_L1 --> LTO++: LedgerLocked
+LTO -[#008a37]-> transfer_status : **FundsPledged**
+
+transfer_status -[#008a37]-> Bridge++: **FundsPledged**
+note right
+    integration point 14
+    **input**
+    - transfer.status.events (integrated)
+    - transfer.create.events (integrated)
+    - bridge.start-transaction.events (internal)
+    **output**
+    - bridge.transaction-shadowed.events (internal)
+end note
+transfer_create -[#008a37]-> Bridge: **TransferCreated**
+Bridge -> LegacyDb: insert_giros
+Bridge -[#008a37]-> bridge_events: **Transaction**\n**Shadowed**
+deactivate Bridge
+
+transfer_status -[#008a37]-> Fallback: **FundsPledged**
+note right
+    integration point 12
+    Notifies client about FundsPledged
+    **input**
+    beside maked inputs it reaches
+    legacy service **template-service**
+end note
+
+transfer_status -[#008a37]-> Notifications : **FundsPledged**
+note right
+    integration point 16
+end note
+
+== Transfer Flow 1 [Authorize (who sender or recipient?)] ==
+
+TransferFlow --> AuthorizationStrategyManager++: StartTransfer\nFlowAuthorization\n<transferId>
+    AuthorizationStrategyManager --> Authorization++: StartAuthorization
+    bridge_events -[#008a37]-> Authorization: TransactionShadowed
+    payment_events -[#008a37]-> Authorization: PaymentAuthorized
+    user_common -[#008a37]-> Authorization: CommonUserDataUpdated
+    user_notifications -[#008a37]-> Authorization: NotificationsUserDataUpdated
+    note left
+    integration point 15
+    **following inputs are used either directly in this service or services called from it**
+    **inputs**
+    - authorization.commands StartAuthorization (internal)
+    - transfer.session.events SenderTransferSession (integrated)
+    - bridge.start-transaction.events TransactionShadowed (integrated)
+    - payment.events PaymentAuthorised (integrated)
+    - user.data-inlined-notification.events NotificationsUserDataUpdated (integrated)
+    - user.data-inlined-common.events CommonUserDataUpdated (integrated)
+    **outputs**
+    - authorization.events AuthorizationCompleted
+    end note
+    authorization_events <-[#008a37]- Authorization--: Authorization\nCompleted\n(accepted or\nrejected)
+    AuthorizationStrategyManager <-[#008a37]- authorization_events--: AuthorizationCompleted
+    ' AuthorizationCompleted(accepted, rejected)
+    ' słucha i i strategy manager jak i fallback TODO: fallback filtruje po rejected
+    ' a manager po accepted
+    authorization_events -[#008a37]-> Fallback++: AuthorizationCompleted
+    note right
+        integration point 17
+        **input**
+        - authorization.events AuthorizationCompleted
+        catch reason for cancellation
+        TODO: Verify?
+        does Fallback filter here AuthorizationCompleted(rejected) ?
+        or it works somehow differently?
+    end note
+    deactivate Fallback
+TransferFlow <-- AuthorizationStrategyManager: TransferFlow\nAuthorization\nCompleted
+' chage to queue
+LTO <--AuthorizationStrategyManager--: TransferFlow\nAuthorizationCompleted
+LTO -[#008a37]-> transfer_status: **Authorized**
+
+transfer_status -[#008a37]-> Fallback: **Authorized**
+note right
+    integration point 18
+    **input**
+    - transfer.status.events **Authorized**
+end note
+
+== Transfer Flow 1 [Capture money] ==
+TransferFlow --> PaymentLedger_L1++: LedgerCapture
+note right
+    integration point 4
+end note
+
+PaymentLedger_L1 --> PaymentService++: CapturePayment
+PaymentService --> CybersourceIntegration++: Capture\nPayment\nSession
+PaymentService <-- CybersourceIntegration--: Payment\nSession\nCaptured
+PaymentLedger_L1 <-- PaymentService--: PaymentCaptured
+TransferFlow <-- PaymentLedger_L1--: LedgerCaptured
+note right
+    integration point 4 : return
+end note
+' todo, change to queues
+PaymentLedger_L1 --> LTO: LedgerCaptured
+LTO -[#008a37]-> transfer_status: **FundsReceived**
+transfer_status -[#008a37]-> Fallback: **FundsReceived**
+note right
+    integration point 19
+    **input**
+    - transfer.status.events **FundsReceived**
+end note
+
+transfer_status -[#008a37]-> Bridge++: **FundsReceived**
+Bridge -> LegacyDb : update_giros \n (PaymentApproved->FundsPledged)
+note left
+    integration point 13
+    **input**
+    - transfer.status.events
+    **output**
+    - bridge.transaction-shadowed.events
+end note
+deactivate Bridge
+== Transfer Flow 1 [TopUp sender] ==
+TransferFlow --> Ledger_L2++: Topup
+TransferFlow <-- Ledger_L2--: ToppedUp
+deactivate TransferFlow
+== Transfer Flow 2 (Sender -> Recipient) ==
+TransferFlow --> Ledger_L2++: LedgerLock
+activate TransferFlow
+TransferFlow <-- Ledger_L2--: LedgerLocked
+TransferFlow --> DummyAuth++: Authorize
+TransferFlow <-- DummyAuth--: Authorized
+TransferFlow --> Ledger_L2++: Capture
+TransferFlow <-- Ledger_L2--: Captured
+TransferFlow --> Ledger_L3++: Topup
+TransferFlow <-- Ledger_L3--: ToppedUp
+deactivate TransferFlow
+== Transfer Flow 3 (Recipient -> Delivery) ==
+TransferFlow --> Ledger_L3++: LedgerLock
+activate TransferFlow
+TransferFlow <-- Ledger_L3--: LedgerLocked
+TransferFlow --> DummyAuth++: Authorize
+TransferFlow <-- DummyAuth--: Authorized
+TransferFlow --> Ledger_L3++: Capture
+TransferFlow <-- Ledger_L3--: Captured
+TransferFlow --> DeliveryLedger_L4++: Topup
+    note right
+        integration point 5
+    end note
+    DeliveryLedger_L4 --> Delivery++: MakeDelivery
+        Delivery --> Notifications:  (payout.commands)\n MakeCashPickup
+        note right
+            integration point 10
+            Notifies client that money is ready to be picked up
+        end note
+        Delivery --> COPLA++:  (payout.commands)\n MakeCashPickup
+        note right
+            integration point 11
+        end note
+        COPLA -> LegacyDb: update_giros (sets status=payed)
+        payout_events <-[#008a37]- COPLA--: PayoutSucceded
+        Delivery <-[#008a37]- payout_events: PayoutSucceded
+    DeliveryLedger_L4 <-- Delivery--: (payout.events)\n DeliverySucceded
+    ' if DeliveryFailed(payout.events) to fallback TODO
+TransferFlow <-- DeliveryLedger_L4--: ToppedUp
+note right
+    integration point 5 : return
+end note
+' todo through topic
+DeliveryLedger_L4 --> LTO: ToppedUp
+LTO -[#008a37]-> transfer_status: **Delivered**
+deactivate TransferFlow
+@enduml
+
+
+' notifications (FundsPledged)
+' 1. TopUp realizowany przez ledger delivery
+
+' 2. Cancel realizowany przez ledger delivery
+' 3. wysłanie notyfikacji klientowi w reakcji na FundsPledged
+' event FundsPledged (transfer.events) 
+' -> TransferNotifcations 
+' -> wyciągają dane z bazki, mapping do legacy templatów (uerzenie do legacy servisu LegacyTemplateService template-service)
+' -> messaging-service (internal)
+' -> messaging-service -> tempalte-service (intenal)
+' -> azure ()
+' 4. wysłanie notyfikacji klientowi w reakcji na MakeCashPickup command (pieniądze gotowe do pobrania)
+
+- Deploy Registration, Authentication and User Model to PROD environment 
+- Finish polishing user model: event types, replicas count, turn off topic/schema autocreation. 
+- Move AppD configuration forward 
+- Release TeamB splunk dashboards
+- Handle Dispatcher revitalization
