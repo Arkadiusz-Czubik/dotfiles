@@ -37,7 +37,7 @@ participant LegacyDb
 == Submit Transfer ==
 UI -> SFF: CreateTransfer
 activate SFF
-    SFF -> TEP++
+    SFF -> TEP++: Tereeere
     TEP --> LTO: CreateTransfer
     note right #e6fff3
         Here LTO configures generic Transfer Flow with all components
